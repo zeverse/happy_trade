@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Common\Constant\Http\External\ShopeeFood\ShopeeFoodDishListRequest;
 use App\DTO\DishDetail;
 use App\DTO\Vendor;
 use App\Interfaces\VendorService;
@@ -39,34 +40,15 @@ class ShopeeFoodServiceProvider extends ServiceProvider implements VendorService
 
     public function getDishList(Vendor $vendor): array
     {
-        // TODO: Implement getDishList() method.
         $deliveryId = $this->getDataFromURL($vendor->url);
         $response = Http::withHeaders(
-            [
-                'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:108.0) Gecko/20100101 Firefox/108.0',
-                'Accept' => 'application/json, text/plain, */*',
-                'Accept-Language' => 'en-GB,en;q=0.5',
-                'Accept-Encoding' => 'gzip, deflate, br',
-                'x-foody-client-id' => '',
-                'x-foody-client-type' => '1',
-                'x-foody-app-type' => '1004',
-                'x-foody-client-version' => '3.0.0',
-                'x-foody-api-version' => '1',
-                'x-foody-client-language' => 'vi',
-                'x-foody-access-token' => '',
-                'Origin' => 'https://shopeefood.vn',
-                'Connection' => 'keep-alive',
-                'Referer' => 'https://shopeefood.vn/',
-                'Sec-Fetch-Dest' => 'empty',
-                'Sec-Fetch-Mode' => 'cors',
-                'Sec-Fetch-Site' => 'cross-site',
-                'TE' => 'trailers'
-            ]
-        )->get("https://gappapi.deliverynow.vn/api/dish/get_delivery_dishes", [
+            ShopeeFoodDishListRequest::$headers
+        )->get(ShopeeFoodDishListRequest::$getDishListURL, [
             "id_type" => 2,
             "request_id" => $deliveryId
-        ])->json()["reply"]["menu_infos"];
-        return [];
+        ])->json();
+
+        return $this->getUniqueDishFromResponse($response);
 
     }
 
@@ -78,32 +60,34 @@ class ShopeeFoodServiceProvider extends ServiceProvider implements VendorService
 
     private function getDataFromURL(string $url): int
     {
-        $response = Http::withHeaders([
-            'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:108.0) Gecko/20100101 Firefox/108.0',
-            'Accept' => 'application/json, text/plain, */*',
-            'Accept-Language' => 'en-GB,en;q=0.5',
-            'Accept-Encoding' => 'gzip, deflate, br',
-            'x-foody-client-id' => '',
-            'x-foody-client-type' => '1',
-            'x-foody-app-type' => '1004',
-            'x-foody-client-version' => '3.0.0',
-            'x-foody-api-version' => '1',
-            'x-foody-client-language' => 'vi',
-            'x-foody-access-token' => '',
-            'Origin' => 'https://shopeefood.vn',
-            'Connection' => 'keep-alive',
-            'Referer' => 'https://shopeefood.vn/',
-            'Sec-Fetch-Dest' => 'empty',
-            'Sec-Fetch-Mode' => 'cors',
-            'Sec-Fetch-Site' => 'cross-site',
-            'TE' => 'trailers'
-        ])->get(
-            "https://gappapi.deliverynow.vn/api/dish/get_delivery_dishes",
-            [
-                "url" => $url
-            ]
+        $getDataFromURLURL = ShopeeFoodDishListRequest::$getIdFromURLURL;
+        $response = Http::withHeaders(
+            ShopeeFoodDishListRequest::$headers
+        )->get(
+            "$getDataFromURLURL?url=$url"
         );
 
         return $response->json()["reply"]["delivery_id"];
+    }
+
+    /**
+     * @param array $response Response of get dish list request
+     * @return array Array of unique dish in selected restaurant
+     */
+    private function getUniqueDishFromResponse(array $response): array
+    {
+        $repeatedDishList = $response["reply"]["menu_infos"];
+        $uniqueDishList = array();
+
+        foreach ($repeatedDishList as $singleDishList) {
+            foreach ($singleDishList["dishes"] as $dish) {
+                if (!array_key_exists($dish["id"], $singleDishList)) {
+                    $uniqueDishList[$dish["id"]] = $dish;
+                }
+            }
+        }
+
+        return array_values($uniqueDishList);
+
     }
 }
